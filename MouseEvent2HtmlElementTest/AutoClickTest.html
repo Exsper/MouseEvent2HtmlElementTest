@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>模拟鼠标自动点击网页元素测试</title>
+
+    <style>
+        .clickme {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: red;
+            filter: Alpha(opacity=50);
+            opacity: 0.5;
+        }
+
+        .modeldiv {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            text-align: center;
+        }
+
+        .startAutoclickDiv {
+            position: absolute;
+            top: 20px;
+            right: 0;
+            background-color: yellow;
+            border: 3px solid;
+            cursor: default;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="clickme" class="clickme" style="left: 200px; top: 100px;" onclick="changePosition()"></div>
+
+    <script>
+        function changePosition() {
+            var posX = Math.round(Math.random() * 500);
+            var posY = Math.round(Math.random() * 500);
+            var div = document.getElementById("clickme");
+            div.style.left = posX + "px";
+            div.style.top = posY + "px";
+        }
+    </script>
+
+
+    <div id="startAutoclickDiv" class="startAutoclickDiv" onclick="relocAndStart()">启动脚本，按ESC键停止</div>
+
+    <script>
+        window.bodyOffsetLeft = 0;
+        window.bodyOffsetTop = 0;
+        function getMousePostoScreen(event) {
+            var e = event || window.event;
+            return { 'x': e.screenX, 'y': e.screenY }
+        }
+        function getMousePostoBody(event) {
+            var e = event || window.event;
+            return { 'x': e.clientX, 'y': e.clientY }
+        }
+        function relocAndStart() {
+            window.autoClicking = true;
+            // 获取窗口基准
+            var e = window.event || arguments.callee.caller.arguments[0];
+            var mouseToScreen = getMousePostoScreen(e);
+            var mouseToBody = getMousePostoBody(e);
+            window.bodyOffsetLeft = mouseToScreen.x - mouseToBody.x;
+            window.bodyOffsetTop = mouseToScreen.y - mouseToBody.y;
+            console.log("基准位置：(" + window.bodyOffsetLeft + ", " + window.bodyOffsetTop + ")");
+            //建立连接
+            var ws = new WebSocket("ws://localhost:1919");
+            ws.onopen = function () {
+                //ws.send('{text:"网页建立webSocket"}');
+                console.log("建立webSocket");
+            };
+            ws.onmessage = function (ev) {
+                console.log("收到消息：" + ev.data);
+            };
+            ws.onclose = function (ev) {
+                //ws.send('{text:"网页关闭webSocket"}');
+                console.log("关闭webSocket");
+            };
+            ws.onerror = function (ev) {
+                console.log(ev.data);
+            };
+            //每500ms检查clickme定位并发送到服务端
+            var clickmeLoc = { x: 0, y: 0 };
+            var autoClicker = setInterval(checkAndSend, 500);
+            function checkAndSend() {
+                var div = document.getElementById("clickme");
+                var clickmeLocNext = {};
+                clickmeLocNext.x = div.offsetLeft + window.bodyOffsetLeft + 4;
+                clickmeLocNext.y = div.offsetTop + window.bodyOffsetTop + 4;
+                if ((clickmeLocNext.x != clickmeLoc.x) || (clickmeLocNext.y != clickmeLoc.y)) {
+                    console.log(clickmeLocNext);
+                    ws.send(JSON.stringify(clickmeLocNext));
+                    clickmeLoc = clickmeLocNext;
+                }
+                if (ws.readyState == 3) clearInterval(autoClicker);
+                if (!window.autoClicking) {
+                    clearInterval(autoClicker);
+                    ws.close();
+                }
+            }
+        }
+
+        document.onkeydown = function (e) {
+            if (e.keyCode === 27) { // ESC
+                window.autoClicking = false;
+            }
+        }
+
+    </script>
+
+</body>
+</html>
